@@ -20,32 +20,57 @@
 
 // start();
 
+// server/index.js
+const express = require("express");
+const cors = require("cors");
+require("dotenv").config();
 
-require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const connectDB = require('./connect');
-const router = require('./routes/tasks');
+const connectDB = require("./connect");
+const router = require("./routes/tasks");
 
 const app = express();
-
-// allow Vite dev origin
-app.use(cors({ origin: 'http://localhost:5173' }));
-app.use(express.json());
-
-// routes
-app.use('/api/v1/tasks', router);
-
 const PORT = process.env.PORT || 5000;
 
+// ---- CORS (allow localhost + Vercel client) ----
+const allowedOrigins = [
+  "http://localhost:5173",
+  process.env.FRONTEND_URL, // e.g. https://task-manager-client-amber.vercel.app
+].filter(Boolean);
+
+app.use(
+  cors({
+    origin(origin, cb) {
+      // allow curl/Postman/same-origin (no Origin header)
+      if (!origin) return cb(null, true);
+
+      // normalize trailing slash before comparing
+      const norm = origin.replace(/\/$/, "");
+      const list = allowedOrigins.map((o) => o.replace(/\/$/, ""));
+
+      if (list.includes(norm)) return cb(null, true);
+      return cb(new Error("CORS blocked for " + origin));
+    },
+    methods: ["GET", "POST", "PATCH", "DELETE"],
+  })
+);
+
+app.use(express.json());
+
+// Simple health check (handy for Render)
+app.get("/api/health", (_req, res) => res.json({ ok: true }));
+
+// API routes
+app.use("/api/v1/tasks", router);
+
+// Boot
 const start = async () => {
   try {
     await connectDB(process.env.MONGO_URI);
-    app.listen(PORT, () => {
-      console.log(`Server started on http://localhost:${PORT}`);
-    });
+    console.log("Database connected…");
+    app.listen(PORT, () => console.log(`Server started on ${PORT}`));
   } catch (err) {
-    console.log(err);
+    console.error(err);
+    process.exit(1);
   }
 };
 
